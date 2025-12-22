@@ -35,3 +35,53 @@ class GrammarParser:
                 rhs = ''
             
             self.productions.append((lhs, rhs))
+            
+    def find_all_occurrences(self, text: str, pattern: str) -> List[int]:
+        """Encontra todas as ocorrências de um padrão em um texto."""
+        positions = []
+        start = 0
+        while True:
+            pos = text.find(pattern, start)
+            if pos == -1: break
+            positions.append(pos)
+            start = pos + 1
+        return positions
+    
+    def apply_production(self, current: str, lhs: str, rhs: str) -> List[str]:
+        """Aplica uma produção em todas as posições possíveis."""
+        results = []
+        positions = self.find_all_occurrences(current, lhs)
+        for pos in positions:
+            new_string = current[:pos] + rhs + current[pos + len(lhs):]
+            results.append(new_string)
+        return results
+    
+    def parse(self, target_word: str, verbose: bool = True) -> Tuple[bool, Optional[List[str]]]:
+        """Verifica se uma palavra pertence à linguagem (BFS)."""
+        queue = deque([(self.start_symbol, [self.start_symbol])])
+        visited: Set[str] = {self.start_symbol}
+        states_explored = 0
+        
+        while queue and states_explored < self.max_states:
+            current, path = queue.popleft()
+            states_explored += 1
+            
+            if current == target_word:
+                if verbose: print(f"✓ Palavra encontrada após explorar {states_explored} estados!")
+                return True, path
+            
+            # Heurísticas de poda
+            if len(path) > self.max_depth: continue
+            if len(current) > len(target_word) * 3: continue
+            
+            for lhs, rhs in self.productions:
+                if lhs in current:
+                    derived = self.apply_production(current, lhs, rhs)
+                    for new_string in derived:
+                        if new_string not in visited or len(path) < 10:
+                            visited.add(new_string)
+                            new_path = path + [new_string]
+                            queue.append((new_string, new_path))
+        
+        if verbose: print(f"✗ Palavra não encontrada após explorar {states_explored} estados.")
+        return False, None
