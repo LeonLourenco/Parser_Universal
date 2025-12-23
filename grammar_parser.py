@@ -21,7 +21,7 @@ class GrammarParser:
         max_states: Número máximo de estados a explorar
     """
     
-    def __init__(self, start_symbol: str = 'S', max_depth: int = 50, max_states: int = 100000):
+    def __init__(self, start_symbol: str = 'S', max_depth: int = 50, max_states: int = 2000000000):
         self.productions: List[Tuple[str, str]] = []
         self.start_symbol = start_symbol
         self.max_depth = max_depth
@@ -114,8 +114,33 @@ class GrammarParser:
             results.append(new_string)
         
         return results
+
+    def is_promising(self, current_string: str, target_word: str) -> bool:
+        """
+        Verifica se a string atual ainda tem chance de virar a palavra alvo.
+        Retorna False se ela já tiver erros óbvios.
+        """
+        # 1. Poda por Tamanho Excessivo
+        # Se a string atual é maior que o alvo e só tem terminais, já falhou.
+        # (Para gramáticas com regras que aumentam tamanho, como S -> SS)
+        if len(current_string) > len(target_word) + 5: # Tolerância pequena
+            return False
+
+        # 2. Poda por Prefixo (A mais importante!)
+        # Extrai a parte inicial da string que só contém terminais
+        terminal_prefix = ""
+        for char in current_string:
+            if char.isupper() or char.isdigit(): # Assume que Uppercase/Digitos são Não-Terminais
+                break
+            terminal_prefix += char
+        
+        # Verifica se o começo da string bate com o alvo
+        if not target_word.startswith(terminal_prefix):
+            return False
+            
+        return True
     
-    def parse(self, target_word: str, verbose: bool = True) -> Tuple[bool, Optional[List[str]]]:
+    def parse(self, target_word: str, verbose: bool = True, use_pruning: bool = True) -> Tuple[bool, Optional[List[str]]]:
         """
         Verifica se uma palavra pertence à linguagem gerada pela gramática.
         
@@ -140,7 +165,7 @@ class GrammarParser:
         states_explored = 0
         
         while queue and states_explored < self.max_states:
-            current, path = queue.popleft()
+            current, path = queue.pop()
             states_explored += 1
             
             # Verifica se encontrou a palavra alvo
@@ -165,10 +190,18 @@ class GrammarParser:
                     derived = self.apply_production(current, lhs, rhs)
                     
                     for new_string in derived:
+                        # OTIMIZAÇÃO: Só aplica se estiver ativada E o caminho não for promissor
+                        if use_pruning and not self.is_promising(new_string, target_word):
+                            continue
+
                         # Evita revisitar estados já explorados
                         if new_string not in visited or len(path) < 10:
                             visited.add(new_string)
                             new_path = path + [new_string]
+                            
+                            # Dica: Para buscas profundas, use append (Pilha)
+                            # Para buscas rasas, use appendleft (Fila)
+                            # Como a regra S->SS é profunda, tente tratar como pilha aqui:
                             queue.append((new_string, new_path))
         
         if verbose:
@@ -189,7 +222,7 @@ class GrammarParser:
         return ' ⇒ '.join(derivation)
 
 
-def test_grammar(name: str, grammar: str, test_word: str, expected: bool) -> bool:
+def test_grammar(name: str, grammar: str, test_word: str, expected: bool, use_pruning: bool = True) -> bool:
     """
     Testa uma gramática com uma palavra específica.
     
@@ -198,6 +231,7 @@ def test_grammar(name: str, grammar: str, test_word: str, expected: bool) -> boo
         grammar: Texto da gramática
         test_word: Palavra a ser testada
         expected: Resultado esperado (True/False)
+        use_pruning: Se True, ativa a poda por prefixo (não usar em Gramáticas Irrestritas/Tipo 0)
         
     Returns:
         True se o teste passou
@@ -207,6 +241,7 @@ def test_grammar(name: str, grammar: str, test_word: str, expected: bool) -> boo
     print(f"{'='*70}")
     print(f"Palavra de entrada: '{test_word}'")
     print(f"Resultado esperado: {'Sim' if expected else 'Não'}")
+    print(f"Otimização (Poda): {'Ativada' if use_pruning else 'Desativada'}")
     print()
     
     parser = GrammarParser(max_depth=100, max_states=200000)
@@ -219,7 +254,8 @@ def test_grammar(name: str, grammar: str, test_word: str, expected: bool) -> boo
     
     print(f"\nIniciando busca BFS...")
     
-    belongs, derivation = parser.parse(test_word, verbose=True)
+    # Passando o parâmetro de poda para o parser
+    belongs, derivation = parser.parse(test_word, verbose=True, use_pruning=use_pruning)
     
     print()
     if belongs:
@@ -234,7 +270,6 @@ def test_grammar(name: str, grammar: str, test_word: str, expected: bool) -> boo
     
     return success
 
-
 def main():
     """
     Função principal que executa todos os casos de teste.
@@ -245,6 +280,54 @@ def main():
     print("="*70)
     
     results = []
+    
+    # QUESTÃO 3: Forma Normal de Chomsky (FNC)
+    
+    # Tradução da solução matemática para o formato do parser:
+    # L1=(, R1=), L2=[, R2=]
+    fnc_grammar = """
+    L1 -> (
+    R1 -> )
+    L2 -> [
+    R2 -> ]
+    S -> SS
+    S -> L1R1
+    S -> L2R2
+    S -> L1C1
+    C1 -> SR1
+    S -> L2C2
+    C2 -> SR2
+    """
+
+    # Teste A: Caso Simples de Aninhamento "([()])"
+    # Derivação esperada (lógica): S => L1C1 => (SR1 => (L2C2) => ([SR2]) => ([L1R1]) => ([()])
+    results.append(test_grammar(
+        "Q3 - FNC Balanceamento (Aninhamento)",
+        fnc_grammar,
+        "([()])",
+        True,
+        use_pruning=True
+    ))
+
+    # Teste B: Caso de Concatenação "()[]"
+    # Regra S -> SS é crucial aqui
+    results.append(test_grammar(
+        "Q3 - FNC Balanceamento (Concatenação)",
+        fnc_grammar,
+        "()[]",
+        True,
+        use_pruning=True
+    ))
+
+    # Teste C: Caso Inválido "([)"
+    # Não deve ser aceito pois falta fechar o colchete e o parêntese
+    results.append(test_grammar(
+        "Q3 - FNC Balanceamento (Inválido)",
+        fnc_grammar,
+        "([)",
+        False,
+        use_pruning=True
+    ))
     
     # CENÁRIO 1: Desafio de Fibonacci (Livre de Contexto)
     fibonacci_grammar = """
@@ -262,7 +345,8 @@ def main():
         "Cenário 1 - Fibonacci (CFG)",
         fibonacci_grammar,
         "aaaaaabbbbbbbb",
-        True
+        True,
+        use_pruning=True
     ))
     
     # CENÁRIO 2: Linguagem Regular Simples
@@ -274,7 +358,8 @@ def main():
         "Cenário 2 - Linguagem Regular (a*b)",
         regular_grammar,
         "aaab",
-        True
+        True,
+        use_pruning=True
     ))
     
     # CENÁRIO 3: a^n b^n c^n (Sensível ao Contexto)
@@ -291,7 +376,8 @@ def main():
         "Cenário 3 - a^n b^n c^n (CSG)",
         context_sensitive,
         "aabbcc",
-        True
+        True,
+        use_pruning=True
     ))
     
     # CENÁRIO 4: Gramática Irrestrita (Tipo 0)
@@ -304,7 +390,8 @@ def main():
         "Cenário 4 - Gramática Irrestrita (Tipo 0)",
         unrestricted_grammar,
         "afinal",
-        True
+        True,
+        use_pruning=False
     ))
     
     # Sumário final

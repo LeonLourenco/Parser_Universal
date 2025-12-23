@@ -1,87 +1,69 @@
 # Parser Universal para Gramáticas da Hierarquia de Chomsky
 
-Um parser de força bruta baseado em **Busca em Largura (BFS)** capaz de processar gramáticas de qualquer tipo da Hierarquia de Chomsky (Tipos 0, 1, 2 e 3).
+> Um parser de força bruta baseado em Busca em Profundidade (DFS) com otimização heurística, capaz de processar gramáticas de qualquer tipo da Hierarquia de Chomsky (Tipos 0, 1, 2 e 3).
 
 ## Descrição
 
-Este projeto implementa um parser universal que, dada uma gramática formal $G$ e uma palavra $\omega$, determina se $\omega \in L(G)$ através de simulação exaustiva de todas as derivações possíveis.
+Este projeto implementa um parser universal que, dada uma gramática formal $G$ e uma palavra $\omega$, determina se $\omega \in L(G)$ através de simulação exaustiva de derivações.
 
-### Características Principais
+## Características Principais
 
-- ✅ Suporta **todos os tipos** da Hierarquia de Chomsky
-- ✅ Gramáticas Regulares (Tipo 3)
-- ✅ Gramáticas Livres de Contexto (Tipo 2)
-- ✅ Gramáticas Sensíveis ao Contexto (Tipo 1)
-- ✅ Gramáticas Irrestritas/Recursivamente Enumeráveis (Tipo 0)
-- ✅ Implementação com BFS para exploração sistemática
-- ✅ Exibição completa da cadeia de derivação
-- ✅ Proteção contra loops infinitos
+* ✅ **Universal:** Suporta todos os 4 tipos da Hierarquia de Chomsky.
+* ✅ **Busca em Profundidade (DFS):** Otimizada para gramáticas altamente recursivas onde a BFS falharia por falta de memória.
+* ✅ **Otimização de Poda (Pruning):** Heurística de verificação de prefixo para cortar caminhos inválidos cedo.
+* ✅ **Flexível:** Parâmetros configuráveis para profundidade, memória e otimização.
 
-## Por que Busca em Largura (BFS)?
+## Fundamentação Teórica
 
-A escolha de BFS para este parser é fundamentada em princípios teóricos sólidos:
+### Por que Busca em Profundidade (DFS)?
 
-### Completude do Algoritmo
+Inicialmente projetado com BFS (Busca em Largura), o parser foi migrado para DFS (usando estrutura de Pilha) para lidar com a **Explosão Combinatória** em gramáticas complexas, como a Forma Normal de Chomsky (FNC).
 
-Para gramáticas dos **Tipos 0 e 1**, onde as produções podem ter regras arbitrárias (inclusive com LHS > RHS), a BFS garante:
+Em regras recursivas como `S -> SS`, a BFS consome memória exponencial ($O(b^d)$) tentando armazenar todas as combinações possíveis de um nível simultaneamente. A DFS mergulha em um caminho único, consumindo memória linear ($O(d)$) proporcional à profundidade da derivação. Isso permite encontrar soluções em árvores profundas onde a BFS travaria o sistema por exaustão de RAM.
 
-1. **Exploração Sistemática**: Todas as derivações de profundidade $k$ são exploradas antes das de profundidade $k+1$
-2. **Menor Caminho**: Se existe uma derivação para a palavra, encontraremos a mais curta
-3. **Semi-decidibilidade**: Para gramáticas Tipo 0, se a palavra pertence à linguagem, o algoritmo eventualmente a encontrará
+### Otimização: Poda por Prefixo
 
-### Vantagem sobre DFS
+Para evitar que a DFS se perca em caminhos infinitos ou incorretos, implementamos uma Poda (*Pruning*):
 
-Uma busca em profundidade (DFS) poderia entrar em loops infinitos em ramificações recursivas antes de explorar outras possibilidades viáveis. A BFS evita este problema explorando todas as possibilidades de cada nível antes de avançar.
-
-### Trade-offs
-
-- **Vantagem**: Completude e garantia de encontrar a derivação mais curta
-- **Desvantagem**: Alto consumo de memória para gramáticas ambíguas
-- **Solução**: Limites de profundidade e número de estados para garantir terminação
+1.  Antes de adicionar um novo estado à pilha, verificamos se o início da string gerada (o prefixo de terminais) corresponde ao início da palavra alvo.
+2.  Se não corresponder, o ramo inteiro é descartado imediatamente.
 
 ## Como Usar
 
 ### Instalação
 
-Nenhuma dependência externa é necessária. Basta ter Python 3.7+ instalado.
+Nenhuma dependência externa é necessária. Basta ter **Python 3.7+** instalado.
 
-```bash
-# Clone ou baixe o arquivo
-python grammar_parser.py
-```
+### Executando os Testes
 
-### Executando os Testes Padrão
+Para rodar a bateria de testes incluída (Fibonacci, Regular, CSG, Irrestrita e FNC):
 
 ```bash
 python grammar_parser.py
 ```
-
-Isto executará automaticamente os 4 cenários de teste incluídos.
-
-### Testando sua Própria Gramática
-
+## Usando em seu Próprio Código
 ```python
 from grammar_parser import GrammarParser
 
-# Crie uma instância do parser
+# 1. Configure o Parser
 parser = GrammarParser(
-    start_symbol='S',    # Símbolo inicial
-    max_depth=50,        # Profundidade máxima de derivação
-    max_states=100000    # Número máximo de estados a explorar
+    start_symbol='S',
+    max_depth=100,      # DFS permite profundidades maiores
+    max_states=200000
 )
 
-# Defina sua gramática
+# 2. Defina a Gramática
 grammar = """
 S -> aSb:
-S -> ε:
+S -> eps:
 """
 
-# Faça o parsing da gramática
 parser.parse_grammar(grammar)
 
-# Teste uma palavra
+# 3. Teste uma palavra
+# use_pruning=True é recomendado para Tipos 1, 2 e 3
 palavra = "aaabbb"
-pertence, derivacao = parser.parse(palavra)
+pertence, derivacao = parser.parse(palavra, use_pruning=True)
 
 if pertence:
     print("✓ Palavra aceita!")
@@ -89,196 +71,55 @@ if pertence:
 else:
     print("✗ Palavra rejeitada")
 ```
-
 ## Formato da Gramática
 
 ### Sintaxe
+`LHS -> RHS: comentário opcional`
 
-```
-LHS -> RHS: comentário opcional
-```
-
-### Regras
-
-- **Separador**: Use `->` entre lado esquerdo e direito
-- **Fim de regra**: Marque com `:` (tudo após é comentário)
-- **Epsilon**: Use `ε` ou `λ` para representar a palavra vazia
-- **Terminais**: Letras minúsculas e dígitos (a-z, 0-9)
-- **Não-terminais**: Letras maiúsculas (A-Z)
-
-### Exemplos
-
-```
-# Gramática Regular: a*b
-S -> aS: loop de 'a'
-S -> b: finaliza com 'b'
-
-# Gramática Sensível ao Contexto: a^n b^n c^n
-S -> aSBC: adiciona símbolos
-S -> aBC: base
-CB -> BC: permuta para ordenar
-aB -> ab: converte não-terminal
-bB -> bb: propaga conversão
-bC -> bc: inicia conversão de C
-cC -> cc: propaga C
-```
+### Regras de Escrita
+* **Separador:** Use `->` para separar lado esquerdo e direito.
+* **Vazio:** Use `eps`, `epsilon` (ou `ε` / `λ`).
+* **Terminais:** Letras minúsculas e dígitos (`a-z`, `0-9`).
+* **Não-terminais:** Letras maiúsculas (`A-Z`).
 
 ## Casos de Teste Incluídos
 
-### Cenário 1: Desafio de Fibonacci (CFG)
-
-**Tipo**: Gramática Livre de Contexto
-
-**Descrição**: Aceita palavras no formato $a^m a^{F_n} b^{F_n} b^p$ onde $F_n$ é um número de Fibonacci.
-
-```
-Gramática:
-S -> aAB
-A -> aA | F1
-F1 -> aF2b
-F2 -> X
-X -> aXb | b
-B -> bB | ε
-
-Entrada: aaaaaabbbbbbbb
-Resultado: ✓ Aceita
-```
+### Cenário 1: Desafio de Fibonacci (CFG - Tipo 2)
+Gramática livre de contexto complexa onde a contagem de 'a's e 'b's segue a sequência de Fibonacci.
 
 ### Cenário 2: Linguagem Regular (Tipo 3)
-
-**Tipo**: Gramática Regular
-
-**Descrição**: Linguagem $L = \{a^n b \mid n \geq 0\}$
-
-```
-Gramática:
-S -> aS | b
-
-Entrada: aaab
-Resultado: ✓ Aceita
-```
+Linguagem simples $a^*b$.
 
 ### Cenário 3: $a^n b^n c^n$ (CSG - Tipo 1)
-
-**Tipo**: Gramática Sensível ao Contexto
-
-**Descrição**: A clássica linguagem $L = \{a^n b^n c^n \mid n \geq 1\}$
-
-```
-Gramática:
-S -> aSBC | aBC
-CB -> BC
-aB -> ab
-bB -> bb
-bC -> bc
-cC -> cc
-
-Entrada: aabbcc
-Resultado: ✓ Aceita
-```
+A clássica linguagem sensível ao contexto que não pode ser gerada por autômatos de pilha, pois requer a contagem simultânea de três grupos de símbolos.
 
 ### Cenário 4: Gramática Irrestrita (Tipo 0)
+Demonstra regras que alteram ou consomem terminais no meio da string (ex: `bCd -> X`).
 
-**Tipo**: Gramática Recursivamente Enumerável
+> **⚠️ Nota Importante:** Neste caso, a otimização de poda (`use_pruning`) deve ser **DESATIVADA**, pois a verificação de prefixo falha quando terminais podem desaparecer.
 
-**Descrição**: Demonstra regras que **encurtam** a string (LHS > RHS).
-
-```
-Gramática:
+**Gramática:**
+```text
 S -> abCde
-bCd -> X         (3 símbolos → 1 símbolo)
+bCd -> X
 aXe -> afinal
-
-Entrada: afinal
-Resultado: ✓ Aceita
-
-Derivação: S ⇒ abCde ⇒ aXe ⇒ afinal
 ```
+* **Entrada:** `afinal`
+* **Configuração:** `use_pruning=False`
+* **Resultado:** ✓ Aceita
+
+### Caso de Estudo: Forma Normal de Chomsky (FNC)
+
+Teste de estresse com a gramática de parênteses balanceados. Devido à regra recursiva `S -> SS`, este caso gera estados exponencialmente. Ele serve para demonstrar a superioridade da **DFS + Poda** sobre a BFS em termos de consumo de memória para este tipo de problema.
 
 ## Parâmetros de Configuração
 
-### `max_depth`
+| Parâmetro | Descrição |
+| :--- | :--- |
+| **`use_pruning`** | **True (Padrão):** Verifica se o prefixo da string atual corresponde à palavra alvo. Essencial para performance em gramáticas recursivas (Tipos 1, 2, 3).<br><br>**False:** Obrigatório para Gramáticas Irrestritas (Tipo 0) onde regras podem deletar ou modificar terminais já gerados. |
+| **`max_depth`** | Profundidade máxima da árvore de derivação. Na DFS, isso atua como um limite rígido para forçar o *backtracking* (voltar e tentar outro caminho). |
+| **`max_states`** | Número máximo de passos totais permitidos antes de abortar a execução. Previne travamentos por loops infinitos. |
 
-- **Padrão**: 50
-- **Descrição**: Profundidade máxima da cadeia de derivação
-- **Quando ajustar**: Aumente para palavras que requerem muitas derivações
+## 🎓 Autor
 
-### `max_states`
-
-- **Padrão**: 100.000
-- **Descrição**: Número máximo de estados únicos a explorar
-- **Quando ajustar**: Aumente para gramáticas muito ambíguas
-
-### Exemplo de Ajuste
-
-```python
-# Para gramáticas complexas
-parser = GrammarParser(max_depth=200, max_states=500000)
-```
-
-## Complexidade
-
-### Temporal
-
-- **Pior caso**: $O(b^d)$ onde:
-  - $b$ = fator de ramificação (número médio de derivações por estado)
-  - $d$ = profundidade da solução
-
-### Espacial
-
-- **Memória**: $O(b^d)$ para armazenar a fila e estados visitados
-
-### Otimizações Implementadas
-
-1. **Conjunto de visitados**: Evita reprocessar estados idênticos
-2. **Poda por tamanho**: Descarta derivações muito maiores que o alvo
-3. **Limites configuráveis**: Previne explosão combinatória
-
-## Conceitos Teóricos
-
-### Hierarquia de Chomsky
-
-| Tipo | Nome | Restrições | Autômato |
-|------|------|------------|----------|
-| 3 | Regular | $A \to aB$ ou $A \to a$ | Finito |
-| 2 | Livre de Contexto | $A \to \alpha$ | Pilha |
-| 1 | Sensível ao Contexto | $\|\alpha\| \leq \|\beta\|$ em $\alpha \to \beta$ | Linear Limitado |
-| 0 | Recursivamente Enumerável | Sem restrições | Turing |
-
-### Decidibilidade
-
-- **Tipos 2 e 3**: Problema de pertinência é **decidível** (sempre termina)
-- **Tipo 1**: Decidível, mas complexidade PSPACE-completo
-- **Tipo 0**: **Semi-decidível** (se pertence, encontra; se não pertence, pode não terminar)
-
-## Contribuindo
-
-Para adicionar novos testes:
-
-```python
-# No final da função main()
-test_grammar(
-    "Meu Teste",
-    """
-    S -> aSa:
-    S -> bSb:
-    S -> ε:
-    """,
-    "aabbaa",
-    True
-)
-```
-
-## Referências
-
-- Hopcroft, J. E., Motwani, R., & Ullman, J. D. (2006). *Introduction to Automata Theory, Languages, and Computation*
-- Sipser, M. (2012). *Introduction to the Theory of Computation*
-- Russell, S., & Norvig, P. (2020). *Artificial Intelligence: A Modern Approach* (BFS Algorithm)
-
-## Licença
-
-Este projeto é disponibilizado para fins educacionais. Sinta-se livre para usar e modificar.
-
-## Autor
-
-Desenvolvido como parte de uma atividade universitária sobre Teoria da Computação e Linguagens Formais da UFRPE.
+Desenvolvido como parte de atividade acadêmica sobre **Teoria da Computação**.
