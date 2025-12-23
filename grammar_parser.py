@@ -85,3 +85,34 @@ class GrammarParser:
         
         if verbose: print(f"✗ Palavra não encontrada após explorar {states_explored} estados.")
         return False, None
+    
+    def format_derivation(self, derivation: List[str]) -> str:
+        return ' ⇒ '.join(derivation)
+
+def test_grammar(name: str, grammar: str, test_word: str, expected: bool) -> bool:
+    print(f"\n{'='*70}\nTESTE: {name}\n{'='*70}")
+    print(f"Palavra de entrada: '{test_word}'")
+    print(f"Resultado esperado: {'Sim' if expected else 'Não'}\n")
+    
+    parser = GrammarParser(max_depth=100, max_states=200000)
+    parser.parse_grammar(grammar)
+    
+    print(f"Gramática carregada com {len(parser.productions)} produções:")
+    for lhs, rhs in parser.productions:
+        rhs_display = rhs if rhs else 'ε'
+        print(f"  {lhs} → {rhs_display}") # Nota: Contém Unicode
+    
+    print(f"\nIniciando busca BFS...\n")
+    belongs, derivation = parser.parse(test_word, verbose=True)
+    
+    print()
+    if belongs:
+        print("✓ RESULTADO: Sim, pertence a L(G)")
+        print("\nCadeia de derivação:")
+        print(parser.format_derivation(derivation))
+    else:
+        print("✗ RESULTADO: Não foi possível derivar a palavra")
+    
+    success = belongs == expected
+    print(f"\n{'✓ TESTE PASSOU' if success else '✗ TESTE FALHOU'}")
+    return success
