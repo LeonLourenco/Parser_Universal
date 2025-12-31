@@ -4,11 +4,12 @@
 
 ## Descrição
 
-Este projeto implementa um parser universal que, dada uma gramática formal $G$ e uma palavra $\omega$, determina se $\omega \in L(G)$ através de simulação exaustiva de derivações.
+Este projeto implementa um parser universal que, dada uma gramática formal $G$ e uma palavra $\omega$, determina se $\omega \in L(G)$ através de simulação exaustiva de derivações. O sistema inclui agora uma **análise estática** que classifica automaticamente a gramática na hierarquia de Chomsky antes da execução.
 
 ## Características Principais
 
 * ✅ **Universal:** Suporta todos os 4 tipos da Hierarquia de Chomsky.
+* ✅ **Detecção Automática de Tipo:** Identifica e alerta se a gramática é Tipo 0, 1, 2 ou 3 (Regular, Livre de Contexto, Sensível ao Contexto ou Irrestrita).
 * ✅ **Busca em Profundidade (DFS):** Otimizada para gramáticas altamente recursivas onde a BFS falharia por falta de memória.
 * ✅ **Otimização de Poda (Pruning):** Heurística de verificação de prefixo para cortar caminhos inválidos cedo.
 * ✅ **Flexível:** Parâmetros configuráveis para profundidade, memória e otimização.
@@ -36,7 +37,7 @@ Nenhuma dependência externa é necessária. Basta ter **Python 3.7+** instalado
 
 ### Executando os Testes
 
-Para rodar a bateria de testes incluída (Fibonacci, Regular, CSG, Irrestrita e FNC):
+Para rodar a bateria de testes incluída (incluindo a prova real de Fibonacci):
 
 ```bash
 python grammar_parser.py
@@ -60,6 +61,9 @@ S -> eps:
 
 parser.parse_grammar(grammar)
 
+# Verifique a classificação da gramática
+print(f"Tipo detectado: {parser.identify_grammar_type()}")
+
 # 3. Teste uma palavra
 # use_pruning=True é recomendado para Tipos 1, 2 e 3
 palavra = "aaabbb"
@@ -77,15 +81,17 @@ else:
 `LHS -> RHS: comentário opcional`
 
 ### Regras de Escrita
-* **Separador:** Use `->` para separar lado esquerdo e direito.
+* **Separador:** Aceita tanto ASCII `->` quanto Unicode `→`.
 * **Vazio:** Use `eps`, `epsilon` (ou `ε` / `λ`).
 * **Terminais:** Letras minúsculas e dígitos (`a-z`, `0-9`).
 * **Não-terminais:** Letras maiúsculas (`A-Z`).
 
 ## Casos de Teste Incluídos
 
-### Cenário 1: Desafio de Fibonacci (CFG - Tipo 2)
-Gramática livre de contexto complexa onde a contagem de 'a's e 'b's segue a sequência de Fibonacci.
+### Cenário 1: Estudo de Caso Fibonacci (Limitação do Tipo 2)
+Este cenário demonstra uma limitação teórica importante. Utilizamos uma Gramática Livre de Contexto (CFG) para tentar representar a sequência de Fibonacci.
+* **Objetivo:** Demonstrar que CFGs geram "falsos positivos" (ex: aceitam 6 'a's, que não é Fibonacci).
+* **Lição:** O teste prova que problemas matemáticos de soma ($F_n = F_{n-1} + F_{n-2}$) exigem gramáticas do Tipo 0 ou 1.
 
 ### Cenário 2: Linguagem Regular (Tipo 3)
 Linguagem simples $a^*b$.
@@ -110,7 +116,7 @@ aXe -> afinal
 
 ### Caso de Estudo: Forma Normal de Chomsky (FNC)
 
-Teste de estresse com a gramática de parênteses balanceados. Devido à regra recursiva `S -> SS`, este caso gera estados exponencialmente. Ele serve para demonstrar a superioridade da **DFS + Poda** sobre a BFS em termos de consumo de memória para este tipo de problema.
+Teste de estresse com a gramática de parênteses balanceados. Devido à regra recursiva S -> SS, este caso gera estados exponencialmente. Ele serve para demonstrar a superioridade da DFS + Poda sobre a BFS em termos de consumo de memória para este tipo de problema.
 
 ## Parâmetros de Configuração
 
@@ -120,6 +126,6 @@ Teste de estresse com a gramática de parênteses balanceados. Devido à regra r
 | **`max_depth`** | Profundidade máxima da árvore de derivação. Na DFS, isso atua como um limite rígido para forçar o *backtracking* (voltar e tentar outro caminho). |
 | **`max_states`** | Número máximo de passos totais permitidos antes de abortar a execução. Previne travamentos por loops infinitos. |
 
-## 🎓 Autor
+## Autor
 
-Desenvolvido como parte de atividade acadêmica sobre **Teoria da Computação**.
+Desenvolvido como parte de atividade acadêmica para a cadeira de **Teoria da Computação** na UFRPE.
