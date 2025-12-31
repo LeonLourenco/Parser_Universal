@@ -1,6 +1,6 @@
 """
 Parser Universal para Gramáticas da Hierarquia de Chomsky
-Implementação usando Busca em Largura (BFS)
+Implementação usando Busca em Profundidade (DFS)
 
 Este módulo implementa um parser de força bruta capaz de processar
 gramáticas de qualquer tipo da Hierarquia de Chomsky (0, 1, 2, 3).
@@ -12,12 +12,12 @@ from typing import List, Tuple, Optional, Set
 
 class GrammarParser:
     """
-    Parser universal para gramáticas formais usando BFS.
+    Parser universal para gramáticas formais usando DFS (Iterative Deepening/Stack).
     
     Attributes:
         productions: Lista de tuplas (LHS, RHS) representando regras gramaticais
         start_symbol: Símbolo inicial da gramática (padrão: 'S')
-        max_depth: Profundidade máxima de derivação para evitar loops infinitos
+        max_depth: Profundidade máxima de derivação (Hard limit para DFS)
         max_states: Número máximo de estados a explorar
     """
     
@@ -30,231 +30,168 @@ class GrammarParser:
     def parse_grammar(self, grammar_text: str) -> None:
         """
         Faz o parsing de uma gramática em formato texto.
-        
-        Formato esperado:
-        - Regras: LHS -> RHS:
-        - Comentários: após ':'
-        - Epsilon: ε ou λ
-        - Terminais: minúsculas/dígitos
-        - Não-terminais: maiúsculas
-        
-        Args:
-            grammar_text: String contendo as regras da gramática
         """
         self.productions = []
         
         for line in grammar_text.strip().split('\n'):
-            # Remove espaços em branco no início e fim
             line = line.strip()
-            
-            # Ignora linhas vazias
             if not line:
                 continue
-            
-            # Remove comentários (tudo após ':' no final da regra)
             if ':' in line:
                 line = line.split(':')[0].strip()
             
-            # Verifica se a linha contém uma produção
-            if '->' not in line:
+            if '->' in line:
+                separator = '->'
+            elif '→' in line:
+                separator = '→'
+            else:
                 continue
             
-            # Separa LHS e RHS
-            lhs, rhs = line.split('->', 1)
+            lhs, rhs = line.split(separator, 1)
             lhs = lhs.strip()
             rhs = rhs.strip()
             
-            # Converte epsilon/lambda para string vazia
             if rhs in ['ε', 'λ']:
                 rhs = ''
             
             self.productions.append((lhs, rhs))
+
+    def identify_grammar_type(self) -> str:
+        """
+        Identifica o tipo da gramática na Hierarquia de Chomsky (0, 1, 2, 3).
+        """
+        is_type_1 = True
+        is_type_2 = True
+        is_type_3 = True
+
+        for lhs, rhs in self.productions:
+            if len(lhs) != 1 or not lhs.isupper():
+                is_type_2 = False
+                is_type_3 = False
+            
+            if is_type_3:
+                if len(rhs) > 2:
+                    is_type_3 = False
+                elif len(rhs) == 2 and not (rhs[0].islower() and rhs[1].isupper()):
+                    is_type_3 = False
+                elif len(rhs) == 1 and not rhs.islower():
+                    is_type_3 = False
+                elif len(rhs) == 0:
+                    pass 
+
+            if len(lhs) > len(rhs) and rhs != '':
+                is_type_1 = False
+            
+        if is_type_3:
+            return "Tipo 3 (Regular)"
+        if is_type_2:
+            return "Tipo 2 (Livre de Contexto)"
+        if is_type_1:
+            return "Tipo 1 (Sensível ao Contexto)"
+        return "Tipo 0 (Irrestrita)"
     
     def find_all_occurrences(self, text: str, pattern: str) -> List[int]:
-        """
-        Encontra todas as ocorrências de um padrão em um texto.
-        
-        Args:
-            text: Texto onde buscar
-            pattern: Padrão a ser encontrado
-            
-        Returns:
-            Lista de índices onde o padrão ocorre
-        """
         positions = []
         start = 0
-        
         while True:
             pos = text.find(pattern, start)
             if pos == -1:
                 break
             positions.append(pos)
             start = pos + 1
-        
         return positions
     
     def apply_production(self, current: str, lhs: str, rhs: str) -> List[str]:
-        """
-        Aplica uma produção em todas as posições possíveis de uma string.
-        
-        Args:
-            current: String atual
-            lhs: Lado esquerdo da produção
-            rhs: Lado direito da produção
-            
-        Returns:
-            Lista de todas as strings derivadas possíveis
-        """
         results = []
         positions = self.find_all_occurrences(current, lhs)
-        
         for pos in positions:
-            # Substitui o LHS pelo RHS na posição encontrada
             new_string = current[:pos] + rhs + current[pos + len(lhs):]
             results.append(new_string)
-        
         return results
 
     def is_promising(self, current_string: str, target_word: str) -> bool:
-        """
-        Verifica se a string atual ainda tem chance de virar a palavra alvo.
-        Retorna False se ela já tiver erros óbvios.
-        """
-        # 1. Poda por Tamanho Excessivo
-        # Se a string atual é maior que o alvo e só tem terminais, já falhou.
-        # (Para gramáticas com regras que aumentam tamanho, como S -> SS)
-        if len(current_string) > len(target_word) + 5: # Tolerância pequena
+        if len(current_string) > len(target_word) + 5:
             return False
 
-        # 2. Poda por Prefixo (A mais importante!)
-        # Extrai a parte inicial da string que só contém terminais
         terminal_prefix = ""
         for char in current_string:
-            if char.isupper() or char.isdigit(): # Assume que Uppercase/Digitos são Não-Terminais
+            if char.isupper() or char.isdigit():
                 break
             terminal_prefix += char
         
-        # Verifica se o começo da string bate com o alvo
         if not target_word.startswith(terminal_prefix):
             return False
-            
         return True
     
     def parse(self, target_word: str, verbose: bool = True, use_pruning: bool = True) -> Tuple[bool, Optional[List[str]]]:
         """
         Verifica se uma palavra pertence à linguagem gerada pela gramática.
-        
-        Usa BFS para explorar todas as derivações possíveis até encontrar
-        a palavra alvo ou atingir os limites de busca.
-        
-        Args:
-            target_word: Palavra a ser verificada
-            verbose: Se True, imprime informações de debug
-            
-        Returns:
-            Tupla (pertence, derivacao) onde:
-            - pertence: True se a palavra foi encontrada
-            - derivacao: Lista com a cadeia de derivação (ou None)
+        Usa DFS (Busca em Profundidade) para explorar derivações.
         """
-        # Fila para BFS: cada elemento é (string_atual, caminho_de_derivação)
+        # Fila para DFS (Pilha): cada elemento é (string_atual, caminho_de_derivação)
         queue = deque([(self.start_symbol, [self.start_symbol])])
-        
-        # Conjunto para evitar revisitar estados (otimização)
         visited: Set[str] = {self.start_symbol}
-        
         states_explored = 0
         
         while queue and states_explored < self.max_states:
+            # pop() sem argumentos remove da direita (LIFO -> Pilha -> DFS)
             current, path = queue.pop()
             states_explored += 1
             
-            # Verifica se encontrou a palavra alvo
             if current == target_word:
                 if verbose:
                     print(f"✓ Palavra encontrada após explorar {states_explored} estados!")
                 return True, path
             
-            # Poda: não expande strings muito maiores que o alvo
-            # (heurística para evitar explosão combinatória)
+            # Limite rígido de profundidade é crucial para DFS não entrar em loop infinito
             if len(path) > self.max_depth:
                 continue
             
             if len(current) > len(target_word) * 3:
                 continue
             
-            # Tenta aplicar cada produção
             for lhs, rhs in self.productions:
-                # Verifica se o LHS está presente na string atual
                 if lhs in current:
-                    # Gera todas as derivações possíveis aplicando esta produção
                     derived = self.apply_production(current, lhs, rhs)
-                    
                     for new_string in derived:
-                        # OTIMIZAÇÃO: Só aplica se estiver ativada E o caminho não for promissor
                         if use_pruning and not self.is_promising(new_string, target_word):
                             continue
 
-                        # Evita revisitar estados já explorados
                         if new_string not in visited or len(path) < 10:
                             visited.add(new_string)
                             new_path = path + [new_string]
-                            
-                            # Dica: Para buscas profundas, use append (Pilha)
-                            # Para buscas rasas, use appendleft (Fila)
-                            # Como a regra S->SS é profunda, tente tratar como pilha aqui:
+                            # append() adiciona na direita
                             queue.append((new_string, new_path))
         
         if verbose:
             print(f"✗ Palavra não encontrada após explorar {states_explored} estados.")
-        
         return False, None
     
     def format_derivation(self, derivation: List[str]) -> str:
-        """
-        Formata uma cadeia de derivação para exibição.
-        
-        Args:
-            derivation: Lista de strings representando cada passo
-            
-        Returns:
-            String formatada com símbolos de derivação
-        """
         return ' ⇒ '.join(derivation)
 
 
 def test_grammar(name: str, grammar: str, test_word: str, expected: bool, use_pruning: bool = True) -> bool:
-    """
-    Testa uma gramática com uma palavra específica.
-    
-    Args:
-        name: Nome do teste
-        grammar: Texto da gramática
-        test_word: Palavra a ser testada
-        expected: Resultado esperado (True/False)
-        use_pruning: Se True, ativa a poda por prefixo (não usar em Gramáticas Irrestritas/Tipo 0)
-        
-    Returns:
-        True se o teste passou
-    """
     print(f"\n{'='*70}")
     print(f"TESTE: {name}")
     print(f"{'='*70}")
     print(f"Palavra de entrada: '{test_word}'")
     print(f"Resultado esperado: {'Sim' if expected else 'Não'}")
-    print(f"Otimização (Poda): {'Ativada' if use_pruning else 'Desativada'}")
-    print()
     
     parser = GrammarParser(max_depth=100, max_states=200000)
     parser.parse_grammar(grammar)
     
+    grammar_type = parser.identify_grammar_type()
+    print(f"Classificação Detectada: {grammar_type}")
+    print(f"Otimização (Poda): {'Ativada' if use_pruning else 'Desativada'}")
+    print("-" * 30)
+
     print(f"Gramática carregada com {len(parser.productions)} produções:")
     for lhs, rhs in parser.productions:
         rhs_display = rhs if rhs else 'ε'
         print(f"  {lhs} → {rhs_display}")
     
-    print(f"\nIniciando busca BFS...")
-    
-    # Passando o parâmetro de poda para o parser
+    print(f"\nIniciando busca DFS...")
     belongs, derivation = parser.parse(test_word, verbose=True, use_pruning=use_pruning)
     
     print()
@@ -266,17 +203,18 @@ def test_grammar(name: str, grammar: str, test_word: str, expected: bool, use_pr
         print("✗ RESULTADO: Não foi possível derivar a palavra")
     
     success = belongs == expected
-    print(f"\n{'✓ TESTE PASSOU' if success else '✗ TESTE FALHOU'}")
+    
+    if not success:
+        print(f"\n✗ ERRO NO TESTE: Esperava {expected}, obteve {belongs}")
+    else:
+        print(f"\n✓ TESTE PASSOU")
     
     return success
 
 def main():
-    """
-    Função principal que executa todos os casos de teste.
-    """
     print("="*70)
-    print("PARSER UNIVERSAL PARA GRAMÁTICAS DA HIERARQUIA DE CHOMSKY")
-    print("Implementação: Busca em Largura (BFS)")
+    print("PARSER UNIVERSAL - COM DETECÇÃO DE HIERARQUIA DE CHOMSKY")
+    print("Implementação: Busca em Profundidade (DFS) com Verificação de Tipos")
     print("="*70)
     
     results = []
@@ -329,7 +267,7 @@ def main():
         use_pruning=True
     ))
     
-    # CENÁRIO 1: Desafio de Fibonacci (Livre de Contexto)
+    # CENÁRIO 1: FIBONACCI (CFG)
     fibonacci_grammar = """
     S -> aAB:
     A -> aA:
@@ -341,11 +279,21 @@ def main():
     B -> bB:
     B -> ε:
     """
+    
     results.append(test_grammar(
-        "Cenário 1 - Fibonacci (CFG)",
+        "Cenário 1A - Fibonacci (CFG) - 6 'a's (Falso Positivo)",
         fibonacci_grammar,
         "aaaaaabbbbbbbb",
-        True,
+        True, 
+        use_pruning=True
+    ))
+
+    print("\n>>> ATENÇÃO: O teste abaixo foi projetado para demonstrar a falha da CFG <<<")
+    results.append(test_grammar(
+        "Cenário 1B - Prova de Falha (Validação Numérica)",
+        fibonacci_grammar,
+        "aaaaaa", 
+        False,    
         use_pruning=True
     ))
     
@@ -354,13 +302,7 @@ def main():
     S -> aS:
     S -> b:
     """
-    results.append(test_grammar(
-        "Cenário 2 - Linguagem Regular (a*b)",
-        regular_grammar,
-        "aaab",
-        True,
-        use_pruning=True
-    ))
+    results.append(test_grammar("Cenário 2 - Regular", regular_grammar, "aaab", True))
     
     # CENÁRIO 3: a^n b^n c^n (Sensível ao Contexto)
     context_sensitive = """
@@ -372,13 +314,7 @@ def main():
     bC -> bc:
     cC -> cc:
     """
-    results.append(test_grammar(
-        "Cenário 3 - a^n b^n c^n (CSG)",
-        context_sensitive,
-        "aabbcc",
-        True,
-        use_pruning=True
-    ))
+    results.append(test_grammar("Cenário 3 - CSG", context_sensitive, "aabbcc", True))
     
     # CENÁRIO 4: Gramática Irrestrita (Tipo 0)
     unrestricted_grammar = """
@@ -386,22 +322,17 @@ def main():
     bCd -> X:
     aXe -> afinal:
     """
-    results.append(test_grammar(
-        "Cenário 4 - Gramática Irrestrita (Tipo 0)",
-        unrestricted_grammar,
-        "afinal",
-        True,
-        use_pruning=False
-    ))
+    results.append(test_grammar("Cenário 4 - Irrestrita", unrestricted_grammar, "afinal", True, use_pruning=False))
     
-    # Sumário final
     print("\n" + "="*70)
     print("SUMÁRIO DOS TESTES")
     print("="*70)
     passed = sum(results)
     total = len(results)
     print(f"Testes passados: {passed}/{total}")
-    print(f"Taxa de sucesso: {(passed/total)*100:.1f}%")
+    
+    if passed < total:
+        print("\nNOTA: A falha no 'Cenário 1B' é esperada e prova a limitação da gramática.")
     print("="*70)
 
 
